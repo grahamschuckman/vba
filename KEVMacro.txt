@@ -1,0 +1,66 @@
+Sub checkKEV()
+    ThisWorkbook.Worksheets("KEV").Activate ' Go to the KEV spreadsheet tab
+    Dim kevStart As Range, cveStart As Range, kevFlagStart As Range, kevDateStart As Range, cveColumn As Long, kevFlagColumn As Long, kevDateColumn As Long, cveLastRow As Long
+    Dim colDiff As Long, colDateDiff As Long, kevCell As Range, cveCell As Range, kev As String, cve As String, kevDate As Date
+    
+    On Error Resume Next
+        ActiveSheet.ShowAllData ' Clear all filters
+    On Error GoTo 0
+    
+    ' Set kevRng = Range("A2:A384")
+    Set kevStart = Range("1:1").Find("cveID").Offset(1, 0) ' Look in the first row for the column named "cveID" and go down one row to the start of the CVEs
+    Set kevRng = Range(kevStart, kevStart.End(xlDown)) ' Set the entire column minus the first row to the CISA KEVs
+    kevColumn = kevStart.Column ' Get the KEV column number
+    kevRng.Select ' Select the KEV range for QC
+    
+    Set kevDateStart = Range("1:1").Find("dueDate").Offset(1, 0) ' Look in the first row for the column named "dueDate" and go down one row to the start of the dates
+    kevDateColumn = kevDateStart.Column
+    colDateDiff = kevDateColumn - kevColumn ' Get number of columns between the KEVs columns to use for offsetting when setting the Flag value
+    
+    Set kevDateRng = Range(kevDateStart, kevDateStart.End(xlDown)) ' Set the entire column minus the first row to the CISA KEVs
+    kevDateRng.Select ' Select the KEV range for QC
+        
+    Sheets("Vulnerability Tracker").Activate ' Go to either the vulnerability tracker or tracker sandbox tab depending on testing or production
+    
+    On Error Resume Next
+        ActiveSheet.ShowAllData ' Clear all filters
+    On Error GoTo 0
+    
+    ' Set cveRng = Range("P2:P6868")
+    Set cveStart = Range("1:1").Find("CVE").Offset(1, 0) ' Look in the first row for the column named "CVE" and go down one row to the start of the CVEs
+    cveColumn = cveStart.Column ' Get the CVE column number
+    cveLastRow = Range("A1").End(xlDown).Row ' Get the last row of contiguous tracker data
+    Set cveRng = Range(cveStart, Cells(cveLastRow, cveColumn)) ' Assign the CVE range to the first CVE cell to the last CVE cell
+    cveRng.Select ' Select the CVE range for QC
+    
+    Set kevFlagStart = Range("1:1").Find("KEV").Offset(1, 0) ' Look in the first row for the column named "KEV" and go down one row to the start of the KEV flags
+    kevFlagColumn = kevFlagStart.Column ' Get the KEV flag column number
+    Set kevFlagRng = Range(kevFlagStart, Cells(cveLastRow, kevFlagColumn)) ' Assign the KEV flag range to the first KEV flag cell to the last KEV flag cell
+    kevFlagRng.Select ' Select the CVE range for QC
+    
+    colDiff = kevFlagColumn - cveColumn ' Get number of columns between the CVE and KEV flag columns to use for offsetting when setting the Flag value
+    
+    Set cveDateStart = Range("1:1").Find("KEV Due Date").Offset(1, 0) ' Look in the first row for the column named "KEV Due Date" and go down one row to the start of the KEV due dates
+    cveDateColumn = cveDateStart.Column ' Get the KEV due date column number
+    Set cveDateRng = Range(cveDateStart, Cells(cveLastRow, cveDateColumn)) ' Assign the cve due date range to the first CVE date cell to the last cve date cell
+    cveDateRng.Select ' Select the CVE Due Date range for QC
+    
+    colDateDiffTracker = cveDateColumn - cveColumn ' Get number of columns between the CVE and KEV due date columns to use for offsetting when writing the due date
+            
+    Sheets("KEV").Activate ' Go back to the KEV spreadsheet tab
+    For Each kevCell In kevRng ' Loop through each KEV and check if value matches any of the CVEs on the tracker tab
+        kev = kevCell.Value
+        For Each cveCell In cveRng ' Loop through each CVE cell to check if the KEV being currently searched is present
+            cve = cveCell.Value
+            stringVal = InStr(cve, kev) ' Issue with function required separation of function output and comparison to 0
+            If stringVal <> 0 Then ' If the output of the substring function is anything over than 0, there is a KEV to CVE match
+                cveCell.Offset(0, colDiff).Value = "Yes" ' Set the value of the KEV Flag column in the current row to "Yes"
+                kevDate = kevCell.Offset(0, colDateDiff).Value ' Store the value of the KEV due date for the current row in the KEV tab
+                cveCell.Offset(0, colDateDiffTracker).Value = kevDate ' Set the value of the KEV due date in the current row on the tracker tab
+            End If
+        Next cveCell
+    Next kevCell
+    
+    MsgBox "All CVE cells checked against the CISA KEV list and due dates added."
+    
+End Sub
