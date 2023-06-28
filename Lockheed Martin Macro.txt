@@ -1,0 +1,849 @@
+Sub Aero()
+    
+    Dim answer As VbMsgBoxResult
+    answer = MsgBox("The Aero IWTA file cannot be processed in read-only mode. If the file has not already been saved to your computer, please click Cancel and then restart the macro.", vbOKCancel)
+    
+    If answer = vbCancel Then
+        Exit Sub
+    End If
+    
+    Dim answer2 As VbMsgBoxResult
+    answer2 = MsgBox("If there are any errors in the Cost Category Column in the Aero file, assign either labor or travel if they are for one of the CEPO IWTAs. If you need to check, please click Cancel and then restart the macro.", vbOKCancel)
+    
+    If answer2 = vbCancel Then
+        Exit Sub
+    End If
+    
+    Dim aeroName As String
+    aeroName = InputBox("Please type in the name of the Aero file, including the extension, that you wish to process. Ex: Aero_January.xlsm")
+    'aeroName = "Copy of Corporate IWTA Summary.xlsm"
+    
+    Application.ScreenUpdating = False
+    
+    'Start timer to determine most efficient macro
+    Dim StartTime As Double
+    Dim SecondsElapsed As Double
+    StartTime = Timer
+    
+    iwTab = "Details"
+    iwTab2 = "ChargeCodes"
+    iwTab3 = "AvgRates"
+    ledgerTab = "Cost Ledger Data"
+    laborTab = "Labor Data"
+    travelTab = "Travel Data"
+    
+    ThisWorkbook.Sheets(iwTab).Activate
+    ActiveSheet.Unprotect "PASSWORD REMOVED"
+    
+    'Filter the IWTA column in the Key tab to inlcude only the Aero IWTA numbers
+    ThisWorkbook.Sheets("Key").Activate
+    Range("1:1").Find("IWTA #").Select
+    If ActiveSheet.AutoFilterMode Then
+        ActiveSheet.AutoFilterMode = False
+    End If
+    ActiveSheet.ListObjects("Table1").Range.AutoFilter Field:=2, Criteria1:="Aero"
+    ActiveCell.Offset(1, 0).Select
+    iwtaStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    iwtaEnd = ActiveCell.Address
+    
+    'Paste the IWTA numbers under the heading Prime Cont No to be used as filter criteria
+    ActiveCell.Offset(5, -3).Select
+    ActiveCell.Value = "Prime Cont No"
+    critStart = ActiveCell.Address
+    ActiveCell.Offset(0, 1).Value = "IWTA"
+    critStart2 = ActiveCell.Offset(0, 1).Address
+    Range(iwtaStart, iwtaEnd).SpecialCells(xlCellTypeVisible).Copy
+    ActiveCell.Offset(1, 0).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    Selection.End(xlDown).Select
+    critEnd = ActiveCell.Address
+    critEnd2 = ActiveCell.Offset(0, 1).Address
+    Range(critStart2).Select
+    Range(iwtaStart, iwtaEnd).SpecialCells(xlCellTypeVisible).Copy
+    ActiveCell.Offset(1, 0).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Create the criterias that will be used with the advanced filter on the Cost Ledger Data tab
+    ActiveCell.Offset(-1, 1).Select
+    ActiveCell.Value = "Allow Flag"
+    critStart3 = ActiveCell.Offset(1, 0).Address
+    critEnd3 = Range(critEnd2).Offset(0, 1).Address
+    Range(critStart3, critEnd3).Value = "A"
+    ActiveCell.Offset(0, 1).Value = "COST CATEGORY"
+    ActiveCell.Offset(0, 2).Value = "COST CATEGORY"
+    critStart4 = Range(critStart3).Offset(0, 1).Address
+    critEnd4 = Range(critEnd3).Offset(0, 1).Address
+    Range(critStart4, critEnd4).Value = "<>TRAVEL"
+    critStart5 = Range(critStart4).Offset(0, 1).Address
+    critEnd5 = Range(critEnd4).Offset(0, 1).Address
+    Range(critStart5, critEnd5).Value = "<>LABOR"
+    
+    'Find the bottom right cell of the entire cost ledger data sheet
+    Workbooks(aeroName).Sheets(ledgerTab).Activate
+    Application.Calculation = xlCalculationManual
+    If (ActiveSheet.AutoFilterMode And ActiveSheet.FilterMode) Or ActiveSheet.FilterMode Then
+        ActiveSheet.ShowAllData
+        Selection.AutoFilter
+    End If
+    Range("A1").Select
+    Selection.End(xlToRight).Select
+    Selection.End(xlDown).Select
+    dataEnd = ActiveCell.Address
+    
+    'Filter the Cost Ledger Data tab to exclude unallowables, travel and labor and only display CEPO/DTO IWTA numbers
+    Range("A1", dataEnd).AdvancedFilter Action:=xlFilterInPlace, CriteriaRange:= _
+        Workbooks("Master_IWTA_ME_JULY.xlsm").Sheets("Key").Range(critStart2, critEnd5), Unique:=False
+    
+    'Identify the entire range of cells in the Labor tab and filter appropriately
+    Workbooks(aeroName).Sheets(laborTab).Activate
+    Application.Calculation = xlCalculationManual
+    If (ActiveSheet.AutoFilterMode And ActiveSheet.FilterMode) Or ActiveSheet.FilterMode Then
+        ActiveSheet.ShowAllData
+    End If
+    Range("A1").Select
+    Selection.End(xlToRight).Select
+    Selection.End(xlDown).Select
+    dataEnd = ActiveCell.Address
+    Range("A1", dataEnd).AdvancedFilter Action:=xlFilterInPlace, CriteriaRange:= _
+    Workbooks("Master_IWTA_ME_JULY.xlsm").Sheets("Key").Range(critStart, critEnd), Unique:=False
+    
+    'Find the beginning of the labor names and format correctly
+    Range("1:1").Find("Emp Last Name").Offset(1, 0).Select
+    pasteStart = ActiveCell.Row
+    lastNameColumn = ActiveCell.Column
+    firstNameColumn = ActiveCell.Offset(0, 1).Column
+    Selection.End(xlDown).Select
+    pasteEnd = ActiveCell.Row
+    Range("1:1").Find("Total Time Hrs").Offset(1, 3).Select
+    nameStart = ActiveCell.Address
+    fullNameColumn = ActiveCell.Column
+    
+    For rowID = pasteStart To pasteEnd
+        Cells(rowID, fullNameColumn).Value = Cells(rowID, firstNameColumn).Value & " " & Cells(rowID, lastNameColumn).Value
+    Next
+    
+    Selection.End(xlDown).Select
+    nameEnd = ActiveCell.Address
+    dateEnd = ActiveCell.Offset(0, 1).Address
+    Range(nameStart, nameEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the labor names
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("L:L").Find("").Offset(0, 1).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks:=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Format the dates and paste them next to the names
+    Workbooks(aeroName).Sheets(laborTab).Activate
+    Range("1:1").Find("Posting Date").Select
+    postColumn = ActiveCell.Column
+    Range(nameStart).Offset(0, 1).Select
+    dateColumn = ActiveCell.Column
+    dateStart = ActiveCell.Address
+    
+    For rowID = pasteStart To pasteEnd
+        Cells(rowID, dateColumn).Value = Mid(Cells(rowID, postColumn).Value, 6, 5) & "/" & Left(Cells(rowID, postColumn).Value, 4)
+    Next
+    
+    Range(dateStart, dateEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the labor dates
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("G:G").Find("").Offset(0, 1).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks:=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Copy the charge codes from the Labor Tab (and clear the contents from the created names and dates)
+    Workbooks(aeroName).Sheets(laborTab).Activate
+    Range(nameStart, dateEnd).ClearContents
+    Range("1:1").Find("Wbs Element").Offset(1, 0).Select
+    codeStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    codeEnd = ActiveCell.Address
+    Range(codeStart, codeEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the charge codes and check if there is a blank row
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("A:A").Find("").Offset(1, 4).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    ActiveCell.Select
+    ActiveCell.Offset(-1, 0).Select
+    If ActiveCell.Value = "" Then
+        Selection.Delete Shift:=xlUp
+    End If
+    
+    'Copy the total time hours and paste into the Master IWTA file
+    Workbooks(aeroName).Sheets(laborTab).Activate
+    Range("1:1").Find("Total Time Hrs").Offset(1, 0).Select
+    hoursStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    hoursEnd = ActiveCell.Address
+    Range(hoursStart, hoursEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the hours (no need to check for a blank row because every cell has hours)
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("L:L").Find("").Offset(0, -2).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    ActiveCell.Select
+    
+    'Store start cells to be used for autofilling Columns A, B, C, D, F, G, I and L
+    Range("A:A").Find("").Select
+    aFillStart = ActiveCell.Address
+    
+    'Find where the formula left off for IWTA numbers
+    Do Until ActiveCell.HasFormula = True And ActiveCell.Interior.Color = RGB(255, 255, 0)
+        ActiveCell.Offset(-1, 0).Select
+    Loop
+    
+    'Copy the formula for IWTA numbers
+    ActiveCell.Select
+    Selection.Copy
+    Range(aFillStart).Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+    ActiveCell.Offset(0, 1).Select
+    ActiveCell.Value = "Aero"
+    bFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    cFillStart = ActiveCell.Address
+    
+    'Find where the formula left off for Major WBS numbers
+    Do Until ActiveCell.HasFormula = True And ActiveCell.Interior.Color = RGB(255, 255, 0)
+        ActiveCell.Offset(-1, 0).Select
+    Loop
+    
+    'Copy the formula for Major WBS numbers
+    ActiveCell.Select
+    Selection.Copy
+    Range(cFillStart).Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+    ActiveCell.Offset(0, 1).Select
+    dFillStart = ActiveCell.Address
+    
+    'Find where the formula left off for WBS element numbers
+    Do Until ActiveCell.HasFormula = True And ActiveCell.Interior.Color = RGB(255, 255, 0)
+        ActiveCell.Offset(-1, 0).Select
+    Loop
+    
+    'Copy the formula for WBS element numbers
+    ActiveCell.Select
+    Selection.Copy
+    Range(dFillStart).Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+    ActiveCell.Offset(0, 2).Select
+    fFillStart = ActiveCell.Address
+    
+    'Find where the formula left off for project descriptions
+    Do Until ActiveCell.HasFormula = True And ActiveCell.Interior.Color = RGB(255, 255, 0)
+        ActiveCell.Offset(-1, 0).Select
+    Loop
+    
+    'Copy the formula for project descriptions
+    ActiveCell.Select
+    Selection.Copy
+    Range(fFillStart).Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+    ActiveCell.Offset(0, 1).Select
+    gFillStart = ActiveCell.Address
+
+    'Find where the formula left off for fiscal months
+    Do Until ActiveCell.HasFormula = True And ActiveCell.Interior.Color = RGB(255, 255, 0)
+        ActiveCell.Offset(-1, 0).Select
+    Loop
+    
+    'Copy the formula for fiscal months
+    ActiveCell.Select
+    Selection.Copy
+    Range(gFillStart).Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+    ActiveCell.Offset(0, 2).Select
+    iFillStart = ActiveCell.Address
+    
+    'Find where the formula left off for type
+    Do Until ActiveCell.HasFormula = True And ActiveCell.Interior.Color = RGB(255, 255, 0)
+        ActiveCell.Offset(-1, 0).Select
+    Loop
+    
+    'Copy the formula for type
+    ActiveCell.Select
+    Selection.Copy
+    Range(iFillStart).Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+    ActiveCell.Offset(0, 3).Select
+    lFillStart = ActiveCell.Address
+        
+    'Find where the formula left off for the average rates
+    Do Until ActiveCell.HasFormula = True And ActiveCell.Interior.Color = RGB(255, 255, 0)
+        ActiveCell.Offset(-1, 0).Select
+    Loop
+    
+    'Copy the formula for the average rates
+    ActiveCell.Select
+    Selection.Copy
+    Range(lFillStart).Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+    'Store end cells to be used for autofilling Columns A, B, C, D, F, G, I and L
+    Range(dFillStart).Offset(0, 1).Select
+    Selection.End(xlDown).Select
+    ActiveCell.Offset(0, -4).Select
+    aFillEnd = ActiveCell.Address
+    bFillEnd = ActiveCell.Offset(0, 1).Address
+    cFillEnd = ActiveCell.Offset(0, 2).Address
+    dFillEnd = ActiveCell.Offset(0, 3).Address
+    fFillEnd = ActiveCell.Offset(0, 5).Address
+    gFillEnd = ActiveCell.Offset(0, 6).Address
+    iFillEnd = ActiveCell.Offset(0, 8).Address
+    lFillEnd = ActiveCell.Offset(0, 11).Address
+    
+    'Use the AutoFill to drag down the formulas for Columns A, B, C, D, F, G, I and L
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(aFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(aFillStart, aFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(bFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(bFillStart, bFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(cFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(cFillStart, cFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(dFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(dFillStart, dFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(fFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(fFillStart, fFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(gFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(gFillStart, gFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(iFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(iFillStart, iFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(lFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(lFillStart, lFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    'Identify the entire range of cells in the Travel tab and filter appropriately
+    Workbooks(aeroName).Sheets(travelTab).Activate
+    Application.Calculation = xlCalculationManual
+    
+    If ActiveSheet.AutoFilterMode Then
+        ActiveSheet.AutoFilterMode = False
+    End If
+    
+    Range("A1").Select
+    Selection.End(xlToRight).Select
+    Selection.End(xlDown).Select
+    dataEnd = ActiveCell.Address
+    
+    ActiveSheet.Range("A1", dataEnd).AutoFilter Field:=13, Criteria1:="A"
+    ActiveSheet.Range("A1", dataEnd).AutoFilter Field:=11, Criteria1:="=CEPO*"
+
+    'Concatenate the names in a column to the right
+    Range("1:1").Find("Last Name").Offset(1, 0).Select
+    pasteStart = ActiveCell.Row
+    lastNameColumn = ActiveCell.Column
+    firstNameColumn = ActiveCell.Offset(0, 1).Column
+    Selection.End(xlDown).Select
+    pasteEnd = ActiveCell.Row
+    Range("1:1").Find("Wip").Offset(1, 1).Select
+    nameStart = ActiveCell.Address
+    fullNameColumn = ActiveCell.Column
+    
+    For rowID = pasteStart To pasteEnd
+        Cells(rowID, fullNameColumn).Value = Cells(rowID, firstNameColumn).Value & " " & Cells(rowID, lastNameColumn).Value
+    Next
+    
+    Selection.End(xlDown).Select
+    nameEnd = ActiveCell.Address
+    dateEnd = ActiveCell.Offset(0, 1).Address
+    Range(nameStart, nameEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the travel names underneath the labor names
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("L:L").Find("").Offset(0, 1).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks:=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Format the dates and paste them next to the names
+    Workbooks(aeroName).Sheets(travelTab).Activate
+    Range("1:1").Find("Year").Select
+    yearColumn = ActiveCell.Column
+    monthColumn = ActiveCell.Offset(0, 1).Column
+    Range(nameStart).Offset(0, 1).Select
+    dateColumn = ActiveCell.Column
+    dateStart = ActiveCell.Address
+    
+    For rowID = pasteStart To pasteEnd
+        Cells(rowID, dateColumn).Value = Cells(rowID, monthColumn).Value & "/01/" & Cells(rowID, yearColumn).Value
+    Next
+    
+    Range(dateStart, dateEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the travel dates underneath the labor dates
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("G:G").Find("").Offset(0, 1).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks:=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Copy the travel charge amounts and paste them underneath the labor charges and delete the created names and dates
+    Workbooks(aeroName).Sheets(travelTab).Activate
+    Range(nameStart, dateEnd).ClearContents
+    Range("1:1").Find("Amount").Offset(1, 0).Select
+    amountStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    amountEnd = ActiveCell.Address
+    Range(amountStart, amountEnd).SpecialCells(xlCellTypeVisible).Copy
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("L:L").Find("").Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Copy the charge code fragments from the Travel Data tab
+    Workbooks(aeroName).Sheets(travelTab).Activate
+    Range("1:1").Find("Workorder").Offset(1, 0).Select
+    codePieceStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    codePieceEnd = ActiveCell.Address
+    Range(codePieceStart, codePieceEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the charge codes and check if there is a blank cell above
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("A:A").Find("").Offset(1, 4).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    ActiveCell.Select
+    ActiveCell.Offset(-1, 0).Select
+    If ActiveCell.Value = "" Then
+        Selection.Delete Shift:=xlUp
+    End If
+    
+    'Go to the ChargeCodes tab and unfilter the data
+    ThisWorkbook.Sheets(iwTab2).Activate
+    If (ActiveSheet.AutoFilterMode And ActiveSheet.FilterMode) Or ActiveSheet.FilterMode Then
+        ActiveSheet.ShowAllData
+        Selection.AutoFilter
+    End If
+    
+    'Filter only Aero so that it can find the full charge codes faster
+    ActiveSheet.ListObjects("Table4").Range.AutoFilter Field:=1, Criteria1:="Aero"
+    Range("1:1").Find("Aero Labor Codes for Non-engineers").Offset(1, 0).Select
+    codeFindStart = ActiveCell.Address
+    Range("1:1").Find("BA").Select
+    Selection.End(xlDown).Select
+    codeFindEnd = ActiveCell.Offset(0, 8).Address
+    
+    'Paste the full charge code if the charge code piece is the same
+    ThisWorkbook.Sheets(iwTab).Activate
+    Application.Calculation = xlCalculationManual
+    Do Until ActiveCell.Value = ""
+        If chargeCodePiece = ActiveCell.Value Then
+            ActiveCell.Value = chargeCodeFull
+            ActiveCell.Offset(1, 0).Select
+        Else 'Store the new charge code piece as a variable and find the full one
+            chargeCodePiece = ActiveCell.Value
+            ThisWorkbook.Sheets(iwTab2).Activate
+            Range(codeFindStart, codeFindEnd).Find(chargeCodePiece).Copy
+            ThisWorkbook.Sheets(iwTab).Activate
+            Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+            :=False, Transpose:=False
+            Application.CutCopyMode = False
+            chargeCodeFull = ActiveCell.Value
+            ActiveCell.Offset(1, 0).Select
+        End If
+    Loop
+    
+    'Store end cells to be used for autofilling Columns A, B, C, D, F, G, I and J
+    ActiveCell.Offset(-1, -4).Select
+    aFillEnd = ActiveCell.Address
+    bFillEnd = ActiveCell.Offset(0, 1).Address
+    cFillEnd = ActiveCell.Offset(0, 2).Address
+    dFillEnd = ActiveCell.Offset(0, 3).Address
+    fFillEnd = ActiveCell.Offset(0, 5).Address
+    gFillEnd = ActiveCell.Offset(0, 6).Address
+    iFillEnd = ActiveCell.Offset(0, 8).Address
+    jFillEnd = ActiveCell.Offset(0, 9).Address
+    
+    'Store start cells to be used for autofilling Columns A, B, C, D, F, G, I and J
+    Range("A:A").Find("").Select
+    ActiveCell.Offset(-1, 0).Select
+    aFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    bFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    cFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    dFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 2).Select
+    fFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    gFillStart = ActiveCell.Address
+
+    ActiveCell.Offset(1, 2).Select
+    ActiveCell.Value = "Travel"
+    iFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    ActiveCell.Value = "Travel"
+    jFillStart = ActiveCell.Address
+    
+    'Use the AutoFill to drag down the formulas for Columns A, B, C, D, F, G, I and J
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(aFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(aFillStart, aFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(bFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(bFillStart, bFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(cFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(cFillStart, cFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(dFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(dFillStart, dFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(fFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(fFillStart, fFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(gFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(gFillStart, gFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(iFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(iFillStart, iFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(jFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(jFillStart, jFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    'Copy the charge code fragments from the Cost Ledger Data tab
+    Workbooks(aeroName).Sheets(ledgerTab).Activate
+    Range("1:1").Find("Workorder").Offset(1, 0).Select
+    codePieceStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    codePieceEnd = ActiveCell.Address
+    Range(codePieceStart, codePieceEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the charge codes and check if there is a blank cell above
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("A:A").Find("").Offset(1, 4).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    ActiveCell.Select
+    ActiveCell.Offset(-1, 0).Select
+    If ActiveCell.Value = "" Then
+        Selection.Delete Shift:=xlUp
+    End If
+    
+    'Paste the full charge code if the charge code piece is the same
+    Application.Calculation = xlCalculationManual
+    Do Until ActiveCell.Value = ""
+        If chargeCodePiece = ActiveCell.Value Then
+            ActiveCell.Value = chargeCodeFull
+            ActiveCell.Offset(1, 0).Select
+        Else 'Store the new charge code piece as a variable and find the full one
+            chargeCodePiece = ActiveCell.Value
+            ThisWorkbook.Sheets(iwTab2).Activate
+            Range(codeFindStart, codeFindEnd).Find(chargeCodePiece).Copy
+            ThisWorkbook.Sheets(iwTab).Activate
+            Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+            :=False, Transpose:=False
+            Application.CutCopyMode = False
+            chargeCodeFull = ActiveCell.Value
+            ActiveCell.Offset(1, 0).Select
+        End If
+    Loop
+    
+    'Copy over the dates for the miscellaneous charges in the Cost Ledger Data tab
+    Workbooks(aeroName).Sheets(ledgerTab).Activate
+    Range("1:1").Find("Workorder").Offset(1, -3).Select
+    pasteStart = ActiveCell.Row
+    yearColumn = ActiveCell.Column
+    monthColumn = ActiveCell.Offset(0, 1).Column
+    Selection.End(xlDown).Select
+    pasteEnd = ActiveCell.Row
+    Range("1:1").Find("IWTA").Offset(1, 2).Select
+    dateStart = ActiveCell.Address
+    dateColumn = ActiveCell.Column
+    Range("1:1").Find("IWTA").Select
+    Selection.End(xlDown).Offset(0, 2).Select
+    dateEnd = ActiveCell.Address
+    
+    For rowID = pasteStart To pasteEnd
+        Cells(rowID, dateColumn).Value = Cells(rowID, monthColumn).Value & "/01/" & Cells(rowID, yearColumn).Value
+    Next
+    
+    Range(dateStart, dateEnd).SpecialCells(xlCellTypeVisible).Copy
+    
+    'Paste the dates underneath the travel dates
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("G:G").Find("").Offset(0, 1).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks:=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Copy over the amounts for the miscellaneous charges in the Cost Ledger Data tab and delete the created dates
+    Workbooks(aeroName).Sheets(ledgerTab).Activate
+    Range(dateStart, dateEnd).ClearContents
+    Range("1:1").Find("IWTA").Offset(1, -1).Select
+    amountStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    amountEnd = ActiveCell.Address
+    Range(amountStart, amountEnd).SpecialCells(xlCellTypeVisible).Copy
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("L:L").Find("").Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    'Copy over the types for the miscellaneous charges in the Cost Ledger Data tab
+    Workbooks(aeroName).Sheets(ledgerTab).Activate
+    Range("1:1").Find("IWTA").Offset(1, 1).Select
+    typeStart = ActiveCell.Address
+    Selection.End(xlDown).Select
+    typeEnd = ActiveCell.Address
+    Range(typeStart, typeEnd).SpecialCells(xlCellTypeVisible).Copy
+    ThisWorkbook.Sheets(iwTab).Activate
+    Range("F:F").Find("").Offset(0, 3).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    ActiveCell.Offset(0, 1).Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+    Application.CutCopyMode = False
+    
+    Calculate
+    
+    'Drag down the formulas for the miscellaneous charges
+    Range("A:A").Find("").Select
+    ActiveCell.Offset(-1, 0).Select
+    aFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    bFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    cFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    dFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 2).Select
+    fFillStart = ActiveCell.Address
+    
+    ActiveCell.Offset(0, 1).Select
+    gFillStart = ActiveCell.Address
+    
+    Range("D:D").Find("").Offset(0, 1).Select
+    Selection.End(xlDown).Select
+    ActiveCell.Offset(0, -4).Select
+    
+    aFillEnd = ActiveCell.Address
+    bFillEnd = ActiveCell.Offset(0, 1).Address
+    cFillEnd = ActiveCell.Offset(0, 2).Address
+    dFillEnd = ActiveCell.Offset(0, 3).Address
+    fFillEnd = ActiveCell.Offset(0, 5).Address
+    gFillEnd = ActiveCell.Offset(0, 6).Address
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(aFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(aFillStart, aFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(bFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(bFillStart, bFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(cFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(cFillStart, cFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(dFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(dFillStart, dFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(fFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(fFillStart, fFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    Set SourceRange = ThisWorkbook.Sheets(iwTab).Range(gFillStart)
+    Set fillRange = ThisWorkbook.Sheets(iwTab).Range(gFillStart, gFillEnd)
+    SourceRange.AutoFill Destination:=fillRange
+    
+    'Go back into the Cost Ledger Data tab and lock in all the ranges for the AvgRates formula
+    Workbooks(aeroName).Sheets(ledgerTab).Activate
+    If (ActiveSheet.AutoFilterMode And ActiveSheet.FilterMode) Or ActiveSheet.FilterMode Then
+        ActiveSheet.ShowAllData
+    End If
+    Range(dateStart, dateEnd).ClearContents
+    Range("1:1").Find("IWTA").Offset(1, -1).Select
+    ttdStart = ActiveCell.Address
+    typeStart = ActiveCell.Offset(0, 2).Address
+    Selection.End(xlDown).Select
+    ttdEnd = ActiveCell.Address
+    typeEnd = ActiveCell.Offset(0, 2).Address
+    
+    Range("1:1").Find("Allow Flag").Offset(1, 0).Select
+    allowStart = ActiveCell.Address
+    woStart = ActiveCell.Offset(0, -2).Address
+    Selection.End(xlDown).Select
+    allowEnd = ActiveCell.Address
+    woEnd = ActiveCell.Offset(0, -2).Address
+    
+    Application.Calculation = xlCalculationAutomatic
+    
+    'Use a SUMIFS formula in the AvgRates tab to calculate labor costs for Aero
+    ThisWorkbook.Sheets(iwTab3).Activate
+    Application.Calculation = xlCalculationManual
+    Range("G:G").Find("Aero").Offset(0, 3).Select
+    
+    Do Until ActiveCell.Offset(0, -3) <> "Aero"
+        ActiveCell.Value = WorksheetFunction.SumIfs(Workbooks(aeroName).Sheets(ledgerTab).Range(ttdStart, ttdEnd), _
+            Workbooks(aeroName).Sheets(ledgerTab).Range(woStart, woEnd), Right(ActiveCell.Offset(0, -1).Value, 8), _
+                Workbooks(aeroName).Sheets(ledgerTab).Range(typeStart, typeEnd), "LABOR", Workbooks(aeroName).Sheets(ledgerTab).Range(allowStart, allowEnd), "A")
+        ActiveCell.Offset(1, 0).Select
+    Loop
+    
+    'Retrieve each IWTA from the Key tab and select it in the slicer on the Dashboard tab in the Aero file
+    ThisWorkbook.Sheets("Key").Activate
+    Range(critStart).Offset(1, 0).Select
+    
+    Do Until ActiveCell.Value = ""
+    
+    'Store the first IWTA number as a variable
+    Dim aeroIWTA As String
+    aeroIWTA = ActiveCell.Value
+    
+    'Use the slicer in the Dashboard tab on the Aero file to populate the AvgRates table
+    Workbooks(aeroName).Sheets("Dashboard").Activate
+    
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+    
+    'Turn off the auto-update for all PivotTables while the slicer runs
+    Dim PT As PivotTable
+    Dim wb As Workbook
+    Dim ws As Worksheet
+
+    Set wb = ActiveWorkbook
+    
+    For Each ws In wb.Sheets
+        For Each PT In ws.PivotTables
+            PT.ManualUpdate = True
+        Next PT
+    Next ws
+    
+    'Use the slicer to select each Aero IWTA
+    Dim i As Integer
+    
+    Dim slicerName As String
+    slicerName = "Slicer_Prime_Cont_No"
+    
+    With ActiveWorkbook.SlicerCaches(slicerName)
+
+    For i = 1 To .SlicerItems.Count
+      If .SlicerItems(i).Caption = aeroIWTA Then .SlicerItems(i).Selected = True: Exit For
+    Next i
+    
+    For i = 1 To .SlicerItems.Count
+      If .SlicerItems(i).Selected And .SlicerItems(i).Caption <> aeroIWTA Then .SlicerItems(i).Selected = False
+    Next i
+    
+    End With
+    
+    'Turn the auto-update back on for all of the PivotTables
+    For Each ws In wb.Sheets
+        For Each PT In ws.PivotTables
+            PT.ManualUpdate = False
+        Next PT
+    Next ws
+    
+    'Select the Total Allowable Expenses value and store it as a variable
+    Application.EnableEvents = True
+    Application.Calculation = xlCalculationAutomatic
+    
+    Range("A:A").Find("Total Allowable Expenses").Offset(0, 1).Select
+    iwtaCTD = ActiveCell.Value
+    
+    'Paste the iwtaCTD value in the AvgRates tab next to the IWTA number
+    ThisWorkbook.Sheets(iwTab3).Activate
+    Range("A:A").Find(aeroIWTA).Offset(0, 1).Select
+    
+    'If the iwtaCTD value is 0, then paste as a blank to keep formatting consistent
+    If iwtaCTD = 0 Then
+        ActiveCell.Value = ""
+    Else
+        ActiveCell.Value = iwtaCTD
+    End If
+
+    'Return back to the Key tab and select the next IWTA number
+    ThisWorkbook.Sheets("Key").Activate
+    ActiveCell.Offset(1, 0).Select
+    
+    Loop
+    
+    Application.Calculation = xlCalculationAutomatic
+
+    SecondsElapsed = Round(Timer - StartTime, 2)
+    MsgBox "This code ran successfully in " & SecondsElapsed & " seconds.", vbInformation
+    MsgBox "Please double check the variances in the AvgRates tab and correct them as necessary."
+    
+    Calculate
+    
+    ThisWorkbook.Sheets(iwTab3).Activate
+    
+    Range("D:D").Find("Variance").Offset(1, 0).Select
+    accountingStart = ActiveCell.Offset(0, -2).Address
+    Selection.End(xlDown).Select
+    accountingEnd = ActiveCell.Offset(0, -2).Address
+    
+    'Format the IWTA Total CTD column as Accounting
+    Range(accountingStart, accountingEnd).Select
+    With Selection
+        Selection.NumberFormat = "_($* #,##0.00_);_($* (#,##0.00);_($* ""-""??_);_(@_)"
+    End With
+    
+    ActiveCell.Select
+    
+    Application.ScreenUpdating = True
+    
+End Sub
